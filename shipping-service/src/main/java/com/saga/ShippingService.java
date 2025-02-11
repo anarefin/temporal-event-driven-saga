@@ -16,12 +16,11 @@ public class ShippingService {
     @Value("${shipping.simulation.success}")
     private boolean simulateSuccess;
 
-    @KafkaListener(topics = "order-events", groupId = "shipping-group")
+    @KafkaListener(topics = "shipping-events", groupId = "shipping-group")
     public void consumeEvent(@Payload OrderEvent event) {
-        if ("INVENTORY_RESERVED".equals(event.getEventType())) {
+        if ("PROCESS_SHIPPING".equals(event.getEventType())) {
             System.out.println("Processing shipping for order: " + event.getOrderId());
                 
-            // Simulate shipping process with configurable success/failure
             if (simulateSuccess) {
                 System.out.println("Shipping completed successfully for order: " + event.getOrderId());
                 kafkaTemplate.send("order-events", new OrderEvent(event.getOrderId(), "SHIPPING_COMPLETED"));
@@ -31,7 +30,6 @@ public class ShippingService {
             }
         } else if ("COMPENSATE_SHIPPING".equals(event.getEventType())) {
             System.out.println("Compensating shipping for order: " + event.getOrderId());
-            // Implement shipping compensation logic here
             kafkaTemplate.send("order-events", new OrderEvent(event.getOrderId(), "SHIPPING_COMPENSATED"));
         }
     }

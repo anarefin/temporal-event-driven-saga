@@ -17,9 +17,9 @@ public class PaymentService {
     @Value("${payment.simulation.success}")
     private boolean simulateSuccess;
 
-    @KafkaListener(topics = "order-events", groupId = "payment-group")
+    @KafkaListener(topics = "payment-events", groupId = "payment-group")
     public void consumeEvent(@Payload OrderEvent event) {
-        if ("ORDER_CREATED".equals(event.getEventType())) {
+        if ("PROCESS_PAYMENT".equals(event.getEventType())) {
             System.out.println("Processing payment for order: " + event.getOrderId());
             
             // Simulate payment processing with configurable success/failure

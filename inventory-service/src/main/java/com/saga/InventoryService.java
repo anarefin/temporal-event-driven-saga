@@ -15,9 +15,9 @@ public class InventoryService {
     @Value("${inventory.simulation.success}")
     private boolean simulateSuccess;
 
-    @KafkaListener(topics = "order-events", groupId = "inventory-group")
+    @KafkaListener(topics = "inventory-events", groupId = "inventory-group")
     public void consumeEvent(@Payload OrderEvent event) {
-        if ("PAYMENT_COMPLETED".equals(event.getEventType())) {
+        if ("RESERVE_INVENTORY".equals(event.getEventType())) {
             System.out.println("Reserving inventory for order: " + event.getOrderId());
             
             // Simulate inventory reservation with configurable success/failure
