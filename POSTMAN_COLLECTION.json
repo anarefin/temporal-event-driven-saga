@@ -1,0 +1,380 @@
+{
+	"info": {
+		"_postman_id": "saga-pattern-testing-001",
+		"name": "Temporal Event-Driven Saga Pattern - Service-Specific Events",
+		"description": "Comprehensive collection for testing the Saga Pattern implementation with Temporal workflows and service-specific events.\n\n## Architecture\n- **Order Service**: Manages order creation with OrderEvent (customerId)\n- **Payment Service**: Processes payments with PaymentEvent (amount, currency, paymentMethod)\n- **Inventory Service**: Manages inventory with InventoryEvent (productId, quantity, warehouseId)\n- **Shipping Service**: Handles shipping with ShippingEvent (address, trackingNumber, carrier)\n- **Saga Orchestrator**: Coordinates the distributed transaction using Temporal workflows\n\n## Service-Specific Events\nEach service now has domain-specific event models:\n- PaymentEvent: Contains payment amount ($100 USD), currency, payment method\n- InventoryEvent: Contains product ID (PROD-123), quantity (2), warehouse (WAREHOUSE-001)\n- ShippingEvent: Contains shipping address, tracking number, carrier\n- OrderEvent: Contains order ID, customer ID, timestamp\n\n## How to Test\n1. Start infrastructure: `docker-compose up -d`\n2. Start all services or use Docker to run them\n3. Use these endpoints to test different scenarios\n4. Monitor logs to see service-specific information\n5. Check Temporal UI at http://localhost:8233 for workflow execution\n\n## Configuration\nBy default, all services are configured for success:\n- payment.simulation.success=true\n- inventory.simulation.success=true\n- shipping.simulation.success=true\n\nTo test failure scenarios, modify application.properties and restart services.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Order Service",
+			"description": "Order Service endpoints for creating orders with service-specific events",
+			"item": [
+				{
+					"name": "Create Order - Success Scenario (Basic)",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8081/orders/ORDER-001",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8081",
+							"path": [
+								"orders",
+								"ORDER-001"
+							]
+						},
+						"description": "Creates a new order with ID ORDER-001 without customer ID.\n\n**Saga Workflow:**\n1. OrderEvent published → Saga Orchestrator receives it\n2. PaymentEvent published → Payment Service processes ($100 USD)\n3. InventoryEvent published → Inventory Service reserves (PROD-123, qty: 2)\n4. ShippingEvent published → Shipping Service arranges (generates tracking number)\n5. Order completes successfully\n\n**Service-Specific Data:**\n- Payment: $100.00 USD, CREDIT_CARD\n- Inventory: PROD-123, Quantity: 2, WAREHOUSE-001\n- Shipping: 123 Main St, Tracking: AUTO-GENERATED\n\n**Expected Result:** All services succeed, order completes"
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"pm.test(\"Response contains success message\", function () {",
+									"    pm.expect(pm.response.text()).to.include(\"Order Creation Request is Initiated\");",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Create Order - With Customer ID",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8081/orders/ORDER-002?customerId=CUST-12345",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8081",
+							"path": [
+								"orders",
+								"ORDER-002"
+							],
+							"query": [
+								{
+									"key": "customerId",
+									"value": "CUST-12345",
+									"description": "Customer identifier for the order"
+								}
+							]
+						},
+						"description": "Creates order ORDER-002 with customer ID CUST-12345.\n\n**New Feature:** OrderEvent now includes customerId field for better domain modeling.\n\n**OrderEvent Details:**\n- orderId: ORDER-002\n- customerId: CUST-12345\n- eventType: ORDER_CREATED\n- timestamp: Auto-generated\n\n**Response includes:** Customer information in the success message"
+					},
+					"response": [],
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"pm.test(\"Status code is 200\", function () {",
+									"    pm.response.to.have.status(200);",
+									"});",
+									"pm.test(\"Response contains customer ID\", function () {",
+									"    pm.expect(pm.response.text()).to.include(\"CUST-12345\");",
+									"});"
+								]
+							}
+						}
+					]
+				},
+				{
+					"name": "Create Order - Premium Customer",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8081/orders/ORDER-PREMIUM-001?customerId=PREMIUM-CUST-999",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8081",
+							"path": [
+								"orders",
+								"ORDER-PREMIUM-001"
+							],
+							"query": [
+								{
+									"key": "customerId",
+									"value": "PREMIUM-CUST-999"
+								}
+							]
+						},
+						"description": "Creates order for premium customer.\n\nUse this to test VIP customer flows (future enhancement)."
+					},
+					"response": []
+				},
+				{
+					"name": "Create Order - Multiple Items Test",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8081/orders/ORDER-003?customerId=CUST-456",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8081",
+							"path": [
+								"orders",
+								"ORDER-003"
+							],
+							"query": [
+								{
+									"key": "customerId",
+									"value": "CUST-456"
+								}
+							]
+						},
+						"description": "Test order for multiple items scenario"
+					},
+					"response": []
+				},
+				{
+					"name": "Create Order - High Volume Test",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8081/orders/{{$randomUUID}}?customerId=CUST-{{$randomInt}}",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8081",
+							"path": [
+								"orders",
+								"{{$randomUUID}}"
+							],
+							"query": [
+								{
+									"key": "customerId",
+									"value": "CUST-{{$randomInt}}"
+								}
+							]
+						},
+						"description": "Creates order with random UUID and customer ID.\n\n**Use for:** Load testing - run this multiple times to test concurrent order processing.\n\n**Postman Variables:**\n- {{$randomUUID}}: Generates unique order ID\n- {{$randomInt}}: Generates random customer ID"
+					},
+					"response": []
+				},
+				{
+					"name": "Create Order - Custom Variables",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8081/orders/{{order_id}}?customerId={{customer_id}}",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8081",
+							"path": [
+								"orders",
+								"{{order_id}}"
+							],
+							"query": [
+								{
+									"key": "customerId",
+									"value": "{{customer_id}}"
+								}
+							]
+						},
+						"description": "Creates an order using collection variables.\n\nModify these variables in the collection settings:\n- order_id\n- customer_id"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Testing Scenarios",
+			"description": "Comprehensive test scenarios for different workflow outcomes",
+			"item": [
+				{
+					"name": "Scenario 1: Complete Success",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8081/orders/SUCCESS-001?customerId=CUST-SUCCESS",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8081",
+							"path": [
+								"orders",
+								"SUCCESS-001"
+							],
+							"query": [
+								{
+									"key": "customerId",
+									"value": "CUST-SUCCESS"
+								}
+							]
+						},
+						"description": "**Expected Outcome:** Complete Success\n\n**Prerequisites:**\n- payment.simulation.success=true\n- inventory.simulation.success=true\n- shipping.simulation.success=true\n\n**Workflow Steps:**\n1. Payment: $100 USD processed successfully\n2. Inventory: PROD-123 (qty:2) reserved from WAREHOUSE-001\n3. Shipping: Address assigned, tracking number generated\n4. Order Status: COMPLETED\n\n**Logs to Monitor:**\n- Payment Service: \"Payment successful for order: SUCCESS-001\"\n- Inventory Service: \"Inventory reserved successfully\"\n- Shipping Service: \"Shipping completed successfully\"\n- Saga Orchestrator: \"Order workflow completed successfully\"\n\n**Temporal UI:** Check workflow status at http://localhost:8233"
+					},
+					"response": []
+				},
+				{
+					"name": "Scenario 2: Payment Failure",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8081/orders/FAIL-PAYMENT-001?customerId=CUST-FAIL",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8081",
+							"path": [
+								"orders",
+								"FAIL-PAYMENT-001"
+							],
+							"query": [
+								{
+									"key": "customerId",
+									"value": "CUST-FAIL"
+								}
+							]
+						},
+						"description": "**Expected Outcome:** Payment Failure (No Compensation Needed)\n\n**Prerequisites:**\n- Set payment.simulation.success=false in payment-service/application.properties\n- Restart payment-service\n\n**Workflow Steps:**\n1. Payment: FAILED (PAYMENT_FAILED event)\n2. Inventory: SKIPPED\n3. Shipping: SKIPPED\n4. Order Status: FAILED\n5. Compensation: NONE (payment failed at first step)\n\n**Test:** Payment failure at first step means no compensation needed"
+					},
+					"response": []
+				},
+				{
+					"name": "Scenario 3: Inventory Failure with Compensation",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8081/orders/FAIL-INVENTORY-001?customerId=CUST-COMP",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8081",
+							"path": [
+								"orders",
+								"FAIL-INVENTORY-001"
+							],
+							"query": [
+								{
+									"key": "customerId",
+									"value": "CUST-COMP"
+								}
+							]
+						},
+						"description": "**Expected Outcome:** Inventory Failure → Payment Compensation\n\n**Prerequisites:**\n- payment.simulation.success=true\n- inventory.simulation.success=false\n- Restart inventory-service\n\n**Workflow Steps:**\n1. Payment: SUCCESS ($100 USD processed)\n2. Inventory: FAILED (out of stock)\n3. Compensation: COMPENSATE_PAYMENT triggered\n4. Shipping: SKIPPED\n5. Order Status: COMPENSATED\n\n**Saga Pattern in Action:**\n- Inventory fails\n- Orchestrator triggers payment refund\n- Order marked as COMPENSATED\n\n**Logs to Check:**\n- Payment Service: \"Compensating payment for order\"\n- Saga Orchestrator: \"Compensating payment and inventory\""
+					},
+					"response": []
+				},
+				{
+					"name": "Scenario 4: Shipping Failure with Full Compensation",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8081/orders/FAIL-SHIPPING-001?customerId=CUST-FULLCOMP",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8081",
+							"path": [
+								"orders",
+								"FAIL-SHIPPING-001"
+							],
+							"query": [
+								{
+									"key": "customerId",
+									"value": "CUST-FULLCOMP"
+								}
+							]
+						},
+						"description": "**Expected Outcome:** Shipping Failure → Full Compensation\n\n**Prerequisites:**\n- payment.simulation.success=true\n- inventory.simulation.success=true\n- shipping.simulation.success=false\n- Restart shipping-service\n\n**Workflow Steps:**\n1. Payment: SUCCESS ($100 USD)\n2. Inventory: SUCCESS (PROD-123 reserved)\n3. Shipping: FAILED (carrier unavailable)\n4. Compensation Chain:\n   - COMPENSATE_INVENTORY (release PROD-123)\n   - COMPENSATE_PAYMENT (refund $100)\n5. Order Status: COMPENSATED\n\n**Full Saga Compensation:**\n- Shipping fails at last step\n- All previous steps are compensated in reverse order\n- Inventory released\n- Payment refunded\n\n**This demonstrates the power of the Saga pattern!**"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Health Checks",
+			"description": "Endpoints to verify services are running",
+			"item": [
+				{
+					"name": "Check Order Service",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8081/actuator/health",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8081",
+							"path": [
+								"actuator",
+								"health"
+							]
+						},
+						"description": "Health check for Order Service (if actuator is enabled)"
+					},
+					"response": []
+				},
+				{
+					"name": "Temporal UI",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "http://localhost:8233",
+							"protocol": "http",
+							"host": [
+								"localhost"
+							],
+							"port": "8233"
+						},
+						"description": "Open Temporal UI to see workflow executions\n\nThis will open in your browser - you can see:\n- Active workflows\n- Completed workflows\n- Failed workflows\n- Compensation flows\n- Event history"
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8081",
+			"type": "string"
+		},
+		{
+			"key": "order_id",
+			"value": "ORDER-001",
+			"type": "string"
+		},
+		{
+			"key": "customer_id",
+			"value": "CUST-12345",
+			"type": "string"
+		}
+	]
+}
