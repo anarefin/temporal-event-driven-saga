@@ -1,7 +1,6 @@
 package com.saga;
 
 import com.saga.common.model.ShippingEvent;
-import com.saga.common.model.OrderEvent;
 import com.saga.common.constants.ShippingEventType;
 import org.springframework.stereotype.Component;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -15,9 +14,6 @@ public class ShippingService {
     
     @Autowired
     private KafkaTemplate<String, ShippingEvent> shippingKafkaTemplate;
-    
-    @Autowired
-    private KafkaTemplate<String, OrderEvent> orderKafkaTemplate;
     
     @Value("${shipping.simulation.success}")
     private boolean simulateSuccess;
@@ -37,14 +33,14 @@ public class ShippingService {
                     "TRACK-" + event.getOrderId(), // Generate tracking number
                     "Standard Carrier"
                 );
-                orderKafkaTemplate.send("order-events", new OrderEvent(event.getOrderId(), "SHIPPING_COMPLETED"));
+                shippingKafkaTemplate.send("shipping-events", completedEvent);
             } else {
                 System.out.println("Shipping failed for order: " + event.getOrderId());
                 ShippingEvent failedEvent = new ShippingEvent(
                     event.getOrderId(), 
                     ShippingEventType.SHIPPING_FAILED
                 );
-                orderKafkaTemplate.send("order-events", new OrderEvent(event.getOrderId(), "SHIPPING_FAILED"));
+                shippingKafkaTemplate.send("shipping-events", failedEvent);
             }
         } else if (ShippingEventType.COMPENSATE_SHIPPING.matches(event.getEventType())) {
             System.out.println("Compensating shipping for order: " + event.getOrderId());
@@ -52,7 +48,7 @@ public class ShippingService {
                 event.getOrderId(), 
                 ShippingEventType.SHIPPING_COMPENSATED
             );
-            orderKafkaTemplate.send("order-events", new OrderEvent(event.getOrderId(), "SHIPPING_COMPENSATED"));
+            shippingKafkaTemplate.send("shipping-events", compensatedEvent);
         }
     }
 } 

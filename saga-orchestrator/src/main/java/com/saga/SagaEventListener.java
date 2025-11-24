@@ -1,7 +1,12 @@
 package com.saga;
 
 import com.saga.common.model.OrderEvent;
-import com.saga.common.constants.EventType;
+import com.saga.common.model.PaymentEvent;
+import com.saga.common.model.InventoryEvent;
+import com.saga.common.model.ShippingEvent;
+import com.saga.common.constants.PaymentEventType;
+import com.saga.common.constants.InventoryEventType;
+import com.saga.common.constants.ShippingEventType;
 import com.saga.config.WorkflowOptionsConfig;
 import io.temporal.api.common.v1.WorkflowExecution;
 import org.slf4j.Logger;
@@ -26,10 +31,11 @@ import java.time.Duration;
  * 3. Structured logging (SLF4J instead of System.out)
  * 4. Graceful handling of duplicate signals
  * 5. Proper workflow execution timeout configuration
+ * 6. Domain-driven event listeners - each service publishes to its own topic
  * 
  * Pattern: Signals for external events (event-driven, durable)
  * - ORDER_CREATED: Starts new workflow
- * - Other events: Signal existing workflow
+ * - Other domain events: Signal existing workflow
  */
 @Component
 public class SagaEventListener {
@@ -40,65 +46,98 @@ public class SagaEventListener {
     @Autowired
     private WorkflowClient workflowClient;
 
+    /**
+     * Listens to order-events topic for ORDER_CREATED events to start workflows
+     */
     @KafkaListener(topics = "order-events", groupId = "saga-group")
-    public void consumeEvent(@Payload OrderEvent event) {
-        // Validation
-        if (event == null) {
-            logger.error("Received null event, ignoring");
-            return;
-        }
-        
-        if (event.getOrderId() == null || event.getOrderId().trim().isEmpty()) {
-            logger.error("Received event with null or empty orderId, ignoring: {}", event);
-            return;
-        }
-        
-        if (event.getEventType() == null || event.getEventType().trim().isEmpty()) {
-            logger.error("Received event with null or empty eventType, ignoring: {}", event);
-            return;
-        }
+    public void consumeOrderEvent(@Payload OrderEvent event) {
         
         String workflowId = event.getOrderId();
         String eventType = event.getEventType();
         
-        logger.info("Processing event: {} for order: {}", eventType, workflowId);
+        logger.info("Processing order event: {} for order: {}", eventType, workflowId);
 
         try {
-            switch (eventType) {
-                case "ORDER_CREATED":
-                    handleOrderCreated(workflowId);
-                    break;
-                    
-                case "PAYMENT_COMPLETED":
-                    signalWorkflow(workflowId, OrderWorkflow::onPaymentCompleted, "payment completion");
-                    break;
-                    
-                case "PAYMENT_FAILED":
-                    signalWorkflow(workflowId, OrderWorkflow::onPaymentFailed, "payment failure");
-                    break;
-                    
-                case "INVENTORY_RESERVED":
-                    signalWorkflow(workflowId, OrderWorkflow::onInventoryReserved, "inventory reservation");
-                    break;
-                    
-                case "INVENTORY_FAILED":
-                    signalWorkflow(workflowId, OrderWorkflow::onInventoryFailed, "inventory failure");
-                    break;
-                    
-                case "SHIPPING_COMPLETED":
-                    signalWorkflow(workflowId, OrderWorkflow::onShippingCompleted, "shipping completion");
-                    break;
-                    
-                case "SHIPPING_FAILED":
-                    signalWorkflow(workflowId, OrderWorkflow::onShippingFailed, "shipping failure");
-                    break;
-                    
-                default:
-                    logger.warn("Unknown event type: {} for order: {}", eventType, workflowId);
+            if ("ORDER_CREATED".equals(eventType)) {
+                handleOrderCreated(workflowId);
+            } else {
+                logger.warn("Unknown order event type: {} for order: {}", eventType, workflowId);
             }
         } catch (Exception e) {
-            logger.error("Error processing event: {} for order: {}", eventType, workflowId, e);
+            logger.error("Error processing order event: {} for order: {}", eventType, workflowId, e);
             // Don't rethrow - let Kafka retry if needed based on consumer config
+        }
+    }
+    
+    /**
+     * Listens to payment-events topic for payment-related events
+     */
+    @KafkaListener(topics = "payment-events", groupId = "saga-group")
+    public void consumePaymentEvent(@Payload PaymentEvent event) {
+        
+        String workflowId = event.getOrderId();
+        String eventType = event.getEventType();
+        
+        logger.info("Processing payment event: {} for order: {}", eventType, workflowId);
+
+        try {
+            if (PaymentEventType.PAYMENT_COMPLETED.matches(eventType)) {
+                signalWorkflow(workflowId, OrderWorkflow::onPaymentCompleted, "payment completion");
+            } else if (PaymentEventType.PAYMENT_FAILED.matches(eventType)) {
+                signalWorkflow(workflowId, OrderWorkflow::onPaymentFailed, "payment failure");
+            } else {
+                logger.debug("Ignoring payment event type: {} for order: {}", eventType, workflowId);
+            }
+        } catch (Exception e) {
+            logger.error("Error processing payment event: {} for order: {}", eventType, workflowId, e);
+        }
+    }
+    
+    /**
+     * Listens to inventory-events topic for inventory-related events
+     */
+    @KafkaListener(topics = "inventory-events", groupId = "saga-group")
+    public void consumeInventoryEvent(@Payload InventoryEvent event) {
+        
+        String workflowId = event.getOrderId();
+        String eventType = event.getEventType();
+        
+        logger.info("Processing inventory event: {} for order: {}", eventType, workflowId);
+
+        try {
+            if (InventoryEventType.INVENTORY_RESERVED.matches(eventType)) {
+                signalWorkflow(workflowId, OrderWorkflow::onInventoryReserved, "inventory reservation");
+            } else if (InventoryEventType.INVENTORY_FAILED.matches(eventType)) {
+                signalWorkflow(workflowId, OrderWorkflow::onInventoryFailed, "inventory failure");
+            } else {
+                logger.debug("Ignoring inventory event type: {} for order: {}", eventType, workflowId);
+            }
+        } catch (Exception e) {
+            logger.error("Error processing inventory event: {} for order: {}", eventType, workflowId, e);
+        }
+    }
+    
+    /**
+     * Listens to shipping-events topic for shipping-related events
+     */
+    @KafkaListener(topics = "shipping-events", groupId = "saga-group")
+    public void consumeShippingEvent(@Payload ShippingEvent event) {
+        
+        String workflowId = event.getOrderId();
+        String eventType = event.getEventType();
+        
+        logger.info("Processing shipping event: {} for order: {}", eventType, workflowId);
+
+        try {
+            if (ShippingEventType.SHIPPING_COMPLETED.matches(eventType)) {
+                signalWorkflow(workflowId, OrderWorkflow::onShippingCompleted, "shipping completion");
+            } else if (ShippingEventType.SHIPPING_FAILED.matches(eventType)) {
+                signalWorkflow(workflowId, OrderWorkflow::onShippingFailed, "shipping failure");
+            } else {
+                logger.debug("Ignoring shipping event type: {} for order: {}", eventType, workflowId);
+            }
+        } catch (Exception e) {
+            logger.error("Error processing shipping event: {} for order: {}", eventType, workflowId, e);
         }
     }
     

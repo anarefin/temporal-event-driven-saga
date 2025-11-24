@@ -1,7 +1,6 @@
 package com.saga;
 
 import com.saga.common.model.PaymentEvent;
-import com.saga.common.model.OrderEvent;
 import com.saga.common.constants.PaymentEventType;
 import org.springframework.stereotype.Component;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -9,16 +8,12 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.messaging.handler.annotation.Payload;
 import org.springframework.kafka.core.KafkaTemplate;
-import java.math.BigDecimal;
 
 @Component
 public class PaymentService {
     
     @Autowired 
     private KafkaTemplate<String, PaymentEvent> paymentKafkaTemplate;
-    
-    @Autowired
-    private KafkaTemplate<String, OrderEvent> orderKafkaTemplate;
     
     @Value("${payment.simulation.success}")
     private boolean simulateSuccess;
@@ -39,14 +34,14 @@ public class PaymentService {
                     event.getCurrency(),
                     event.getPaymentMethod()
                 );
-                orderKafkaTemplate.send("order-events", new OrderEvent(event.getOrderId(), "PAYMENT_COMPLETED"));
+                paymentKafkaTemplate.send("payment-events", successEvent);
             } else {
                 System.out.println("Payment failed for order: " + event.getOrderId());
                 PaymentEvent failureEvent = new PaymentEvent(
                     event.getOrderId(), 
                     PaymentEventType.PAYMENT_FAILED
                 );
-                orderKafkaTemplate.send("order-events", new OrderEvent(event.getOrderId(), "PAYMENT_FAILED"));
+                paymentKafkaTemplate.send("payment-events", failureEvent);
             }
         } else if (PaymentEventType.COMPENSATE_PAYMENT.matches(event.getEventType())) {
             System.out.println("Compensating payment for order: " + event.getOrderId());
@@ -55,7 +50,7 @@ public class PaymentService {
                 event.getOrderId(), 
                 PaymentEventType.PAYMENT_COMPENSATED
             );
-            orderKafkaTemplate.send("order-events", new OrderEvent(event.getOrderId(), "PAYMENT_COMPENSATED"));
+            paymentKafkaTemplate.send("payment-events", compensatedEvent);
         }
     }
 }

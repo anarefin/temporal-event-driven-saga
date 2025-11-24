@@ -1,7 +1,6 @@
 package com.saga;
 
 import com.saga.common.model.InventoryEvent;
-import com.saga.common.model.OrderEvent;
 import com.saga.common.constants.InventoryEventType;
 import org.springframework.stereotype.Component;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -14,9 +13,6 @@ import org.springframework.beans.factory.annotation.Value;
 public class InventoryService {
     @Autowired
     private KafkaTemplate<String, InventoryEvent> inventoryKafkaTemplate;
-    
-    @Autowired
-    private KafkaTemplate<String, OrderEvent> orderKafkaTemplate;
     
     @Value("${inventory.simulation.success}")
     private boolean simulateSuccess;
@@ -37,14 +33,14 @@ public class InventoryService {
                     event.getQuantity(),
                     event.getWarehouseId()
                 );
-                orderKafkaTemplate.send("order-events", new OrderEvent(event.getOrderId(), "INVENTORY_RESERVED"));
+                inventoryKafkaTemplate.send("inventory-events", reservedEvent);
             } else {
                 System.out.println("Inventory reservation failed for order: " + event.getOrderId());
                 InventoryEvent failedEvent = new InventoryEvent(
                     event.getOrderId(), 
                     InventoryEventType.INVENTORY_FAILED
                 );
-                orderKafkaTemplate.send("order-events", new OrderEvent(event.getOrderId(), "INVENTORY_FAILED"));
+                inventoryKafkaTemplate.send("inventory-events", failedEvent);
             }
         } else if (InventoryEventType.COMPENSATE_INVENTORY.matches(event.getEventType())) {
             System.out.println("Compensating inventory reservation for order: " + event.getOrderId());
@@ -53,7 +49,7 @@ public class InventoryService {
                 event.getOrderId(), 
                 InventoryEventType.INVENTORY_COMPENSATED
             );
-            orderKafkaTemplate.send("order-events", new OrderEvent(event.getOrderId(), "INVENTORY_COMPENSATED"));
+            inventoryKafkaTemplate.send("inventory-events", compensatedEvent);
         }
     }
 }
